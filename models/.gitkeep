@@ -1,0 +1,13 @@
+text,sentiment
+"I absolutely loved the new update and the feature works perfectly.",positive
+"This product is terrible and the service was awful.",negative
+"The meeting was okay and the response was neutral.",neutral
+"The app is very fast and easy to use every day.",positive
+"I am disappointed with the quality and the support was slow.",negative
+"The result was acceptable and the team handled it fairly.",neutral
+"I really enjoyed the design and the performance exceeded my expectations.",positive
+"The website crashes often and the experience feels frustrating.",negative
+"The update is fine and the overall impression is average.",neutral
+"This is fantastic, I am thrilled with the new improvements.",positive
+"I hated the implementation and the delay was unacceptable.",negative
+"It was a standard experience without major strengths or issues.",neutral
