@@ -1,112 +1,122 @@
 from __future__ import annotations
 
-import html
-import re
-from typing import Iterable, List, Sequence
+from pathlib import Path
+from typing import Any, Iterable
 
-from nltk import download as nltk_download
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+import numpy as np
+import pandas as pd
 
-NEGATION_WORDS = {
-    "not", "no", "never", "none", "cannot", "can't", "won't", "isn't", "aren't",
-    "wasn't", "weren't", "don't", "doesn't", "didn't", "haven't", "hasn't", "hadn't",
-    "nor", "hardly", "barely"
-}
-
-_LEMMATIZER = WordNetLemmatizer()
-_STOPWORDS = None
+from src.preprocessing import preprocess_text
+from src.train_model import DEFAULT_DATASET_PATH, DEFAULT_MODEL_PATH, load_or_train_model
 
 
-def _ensure_nltk_resources() -> None:
-    """Download the minimal NLTK resources used by the preprocessing pipeline."""
-    resources = ["punkt", "stopwords", "wordnet", "omw-1.4"]
-    for resource in resources:
-        try:
-            if resource == "punkt":
-                word_tokenize("test")
-            elif resource == "stopwords":
-                stopwords.words("english")
-            elif resource == "wordnet":
-                _LEMMATIZER.lemmatize("test")
-            elif resource == "omw-1.4":
-                _LEMMATIZER.lemmatize("test")
-        except Exception:
-            try:
-                nltk_download(resource, quiet=True)
-            except Exception:
-                pass
-
-
-_ensure_nltk_resources()
-
-
-def _get_stopwords() -> set[str]:
-    global _STOPWORDS
-    if _STOPWORDS is None:
-        try:
-            _STOPWORDS = set(stopwords.words("english"))
-        except Exception:
-            _STOPWORDS = set()
-        _STOPWORDS = {word for word in _STOPWORDS if word not in NEGATION_WORDS}
-    return _STOPWORDS
-
-
-def normalize_text(text: str | None) -> str:
-    """Convert raw text into a clean, comparable format for sentiment modeling."""
+def predict_single_text(
+    text: str,
+    model: Any | None = None,
+    dataset_path: str | Path = DEFAULT_DATASET_PATH,
+    model_path: str | Path = DEFAULT_MODEL_PATH,
+) -> dict[str, Any]:
+    """Predict the sentiment and class probabilities for a single text input."""
     if text is None:
-        return ""
+        raise ValueError("Text input cannot be empty.")
     if not isinstance(text, str):
         text = str(text)
+    cleaned = preprocess_text(text)
+    if not cleaned:
+        raise ValueError("Text input cannot be empty or contain only punctuation.")
 
-    text = html.unescape(text)
-    text = re.sub(r"https?://\S+|www\.\S+", " ", text, flags=re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = text.replace("&nbsp;", " ")
-    text = text.replace("\u2019", "'")
-    text = text.replace("\u2018", "'")
-    text = re.sub(r"[^\w\s']", " ", text, flags=re.UNICODE)
-    text = re.sub(r"\s+", " ", text).strip().lower()
-    if not text:
-        return ""
+    if model is None:
+        bundle = load_or_train_model(dataset_path=dataset_path, model_path=model_path)
+        model = bundle["model"]
+
+    probabilities = model.predict_proba([cleaned])[0]
+    labels = list(model.classes_)
+    index = int(np.argmax(probabilities))
+    predicted = labels[index]
+    confidence = float(probabilities[index])
+
+    return {
+        "sentiment": predicted,
+        "confidence": confidence,
+        "probabilities": {label: float(prob) for label, prob in zip(labels, probabilities)},
+        "preprocessed_text": cleaned,
+    }
+
+
+def predict_batch_texts(
+    texts: Iterable[str] | pd.DataFrame,
+    model: Any | None = None,
+    dataset_path: str | Path = DEFAULT_DATASET_PATH,
+    model_path: str | Path = DEFAULT_MODEL_PATH,
+) -> pd.DataFrame:
+    """Predict sentiment labels for a list of texts and return a DataFrame of probabilities."""
+    if isinstance(texts, pd.DataFrame):
+        if "text" not in texts.columns:
+            raise ValueError("The DataFrame must include a 'text' column for batch prediction.")
+        texts = texts["text"].tolist()
+
+    items = list(texts)
+    if not items:
+        raise ValueError("No text values were provided for batch analysis.")
+
+    prepared = []
+    for value in items:
+        cleaned = preprocess_text(value)
+        if not cleaned:
+            prepared.append("")
+        else:
+            prepared.append(cleaned)
+
+    if model is None:
+        bundle = load_or_train_model(dataset_path=dataset_path, model_path=model_path)
+        model = bundle["model"]
+
+    probabilities = model.predict_proba(prepared)
+    labels = list(model.classes_)
+    rows = []
+
+    for index, original_text in enumerate(items):
+        class_probs = {label: float(value) for label, value in zip(labels, probabilities[index])}
+        predicted_label = max(class_probs, key=class_probs.get)
+        rows.append(
+            {
+                "text": str(original_text),
+                "predicted_sentiment": predicted_label,
+                "confidence": float(class_probs[predicted_label]),
+                **{f"prob_{label}": class_probs[label] for label in labels},
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def validate_uploaded_csv(uploaded_file: Any) -> pd.DataFrame:
+    """Validate uploaded CSV files and return a DataFrame with a clean 'text' column."""
+    if uploaded_file is None:
+        raise ValueError("No file was uploaded.")
+
+    file_path = Path(getattr(uploaded_file, "name", "uploaded.csv"))
+    if file_path.suffix.lower() != ".csv":
+        raise ValueError("Only CSV files are supported for batch uploads.")
 
     try:
-        tokens = word_tokenize(text)
-    except Exception:
-        tokens = text.split()
+        if hasattr(uploaded_file, "read"):
+            data = uploaded_file.read()
+            if not data:
+                raise ValueError("The uploaded CSV file is empty.")
+            df = pd.read_csv(pd.io.common.BytesIO(data))
+        else:
+            df = pd.read_csv(file_path)
+    except Exception as exc:  # pragma: no cover - defensive path
+        raise ValueError(f"The uploaded CSV file could not be parsed: {exc}") from exc
 
-    cleaned_tokens: List[str] = []
-    for token in tokens:
-        token = token.strip("'")
-        if not token:
-            continue
-        if token in NEGATION_WORDS:
-            cleaned_tokens.append(token)
-            continue
-        if token in _get_stopwords():
-            continue
-        cleaned_tokens.append(_LEMMATIZER.lemmatize(token, pos="v"))
+    if df.empty:
+        raise ValueError("The uploaded CSV file is empty.")
+    if "text" not in df.columns:
+        raise ValueError("The uploaded CSV file must contain a 'text' column.")
 
-    return " ".join(cleaned_tokens).strip()
-
-
-def preprocess_text(text: str | None) -> str:
-    """A safe, reusable preprocessing function for both training and inference."""
-    if text is None:
-        return ""
-    if not isinstance(text, str):
-        text = str(text)
-    text = text.strip()
-    if not text:
-        return ""
-    normalized = normalize_text(text)
-    if not normalized:
-        return ""
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    return normalized
-
-
-def preprocess_batch(texts: Iterable[str]) -> List[str]:
-    """Preprocess a sequence of text entries while preserving consistent handling."""
-    return [preprocess_text(text) for text in texts]
+    cleaned = df[["text"]].copy()
+    cleaned["text"] = cleaned["text"].fillna("").astype(str).str.strip()
+    if (cleaned["text"] == "").any():
+        raise ValueError("The uploaded CSV file contains one or more empty text rows.")
+    return cleaned.reset_index(drop=True)

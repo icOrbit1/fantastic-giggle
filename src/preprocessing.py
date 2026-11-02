@@ -1,129 +1,28 @@
-# fantastic-giggle
-
-This repository contains a small social-intent sentiment analysis project built with Python, NLTK, Scikit-learn, and Streamlit.
-
-## Project overview
-
-The app loads a small sample CSV dataset, validates it, preprocesses text, trains a TF-IDF + logistic regression sentiment model, and exposes the workflow through a Streamlit frontend. The project is intentionally beginner-friendly and modular so a real labelled dataset can replace the demo data easily.
-
-## Features
-
-- Text sentiment analyzer for single inputs
-- Batch CSV sentiment analysis
-- Dataset validation and class distribution reporting
-- Model evaluation with held-out test metrics
-- Preprocessing utility with URL, HTML, whitespace, and punctuation cleanup
-- Streamlit dashboard and dataset explorer pages
-
-## Technology stack
-
-- Python 3.10+
-- Streamlit
-- Pandas
-- NumPy
-- Scikit-learn
-- NLTK
-- Matplotlib
-- Seaborn
-- Pytest
-
-## Project structure
-
-```text
-fantastic-giggle/
-├── app.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── data/
-│   └── sample_sentiment.csv
-├── models/
-│   └── .gitkeep
-├── src/
-│   ├── __init__.py
-│   ├── preprocessing.py
-│   ├── train_model.py
-│   ├── predictor.py
-│   └── evaluation.py
-├── tests/
-│   ├── test_preprocessing.py
-│   ├── test_predictor.py
-│   └── test_dataset.py
-└── .streamlit/
-    └── config.toml
-```
-
-## Installation
-
-### Windows
-
-```bash
-cd fantastic-giggle
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### Linux/macOS
-
-```bash
-cd fantastic-giggle
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-## Run the app locally
-
-```bash
-streamlit run app.py
-```
-
-## Retrain the model
-
-```bash
-python -c "from src.train_model import train_model; train_model('data/sample_sentiment.csv', 'models/sentiment_model.joblib')"
-```
-
-## Dataset format
-
-The CSV should have two columns:
-
-```csv
 text,sentiment
-"I really enjoyed the product.",positive
-"The service was terrible.",negative
-"The update is okay.",neutral
-```
-
-## How to run tests
-
-```bash
-pytest
-```
-
-## Streamlit Community Cloud deployment
-
-1. Push the repository to GitHub.
-2. Open https://share.streamlit.io/
-3. Choose the repository `icOrbit1/fantastic-giggle`
-4. Use branch `main`
-5. Set the entry point to `app.py`
-6. Deploy
-
-## Troubleshooting
-
-- If NLTK resources are missing, run:
-
-```bash
-python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('wordnet'); nltk.download('omw-1.4')"
-```
-
-- If the model is stale or incompatible, delete `models/sentiment_model.joblib` and retrain it.
-
-## Limitations
-
-This repository ships with a small demonstration dataset for learning and testing. It should not be treated as a real-world benchmark, and the model should be retrained on domain-specific data before production use.
-
+"I absolutely love this product. It works perfectly and makes me happy.",positive
+"This is the worst experience I have ever had. I am very disappointed.",negative
+"The update is okay and does what it says, but nothing special.",neutral
+"Fantastic service and the team was extremely helpful.",positive
+"I hated the delay and the support was rude.",negative
+"The app is fine for basic tasks and nothing more.",neutral
+"I really enjoyed using this feature and would recommend it.",positive
+"The product broke quickly and the refund process was frustrating.",negative
+"It is an average product with no major issues or surprises.",neutral
+"Amazing quality and very easy to use.",positive
+"Terrible performance and the interface kept freezing.",negative
+"The response was acceptable and the result was predictable.",neutral
+"I am thrilled with the new release and the design is beautiful.",positive
+"This was a bad purchase and I regret buying it.",negative
+"The tool is moderately useful and fairly reliable.",neutral
+"Excellent support and fast delivery.",positive
+"The app crashed repeatedly and I lost my progress.",negative
+"The summary is neutral and balanced without a strong opinion.",neutral
+"Super happy with the purchase and the instructions were clear.",positive
+"Awful customer service and the issue was never resolved.",negative
+"The dashboard is okay, but it needs more customization.",neutral
+"I love the interface and the speed is impressive.",positive
+"I am disappointed by the quality and the support was poor.",negative
+"The report looks standard and is neither exciting nor disappointing.",neutral
+"Very satisfied with the upgrade and the product feels premium.",positive
+"Unfortunately the feature fails often and frustrates me.",negative
+"It is a decent app with moderate features and no standout issues.",neutral
