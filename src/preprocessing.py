@@ -1,28 +1,129 @@
-text,sentiment
-"I absolutely love this product. It works perfectly and makes me happy.",positive
-"This is the worst experience I have ever had. I am very disappointed.",negative
-"The update is okay and does what it says, but nothing special.",neutral
-"Fantastic service and the team was extremely helpful.",positive
-"I hated the delay and the support was rude.",negative
-"The app is fine for basic tasks and nothing more.",neutral
-"I really enjoyed using this feature and would recommend it.",positive
-"The product broke quickly and the refund process was frustrating.",negative
-"It is an average product with no major issues or surprises.",neutral
-"Amazing quality and very easy to use.",positive
-"Terrible performance and the interface kept freezing.",negative
-"The response was acceptable and the result was predictable.",neutral
-"I am thrilled with the new release and the design is beautiful.",positive
-"This was a bad purchase and I regret buying it.",negative
-"The tool is moderately useful and fairly reliable.",neutral
-"Excellent support and fast delivery.",positive
-"The app crashed repeatedly and I lost my progress.",negative
-"The summary is neutral and balanced without a strong opinion.",neutral
-"Super happy with the purchase and the instructions were clear.",positive
-"Awful customer service and the issue was never resolved.",negative
-"The dashboard is okay, but it needs more customization.",neutral
-"I love the interface and the speed is impressive.",positive
-"I am disappointed by the quality and the support was poor.",negative
-"The report looks standard and is neither exciting nor disappointing.",neutral
-"Very satisfied with the upgrade and the product feels premium.",positive
-"Unfortunately the feature fails often and frustrates me.",negative
-"It is a decent app with moderate features and no standout issues.",neutral
+from __future__ import annotations
+
+import html
+import re
+from typing import Iterable, List
+
+from nltk import download as nltk_download
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+
+NEGATION_WORDS = {
+    "not",
+    "no",
+    "never",
+    "none",
+    "cannot",
+    "can't",
+    "won't",
+    "isn't",
+    "aren't",
+    "wasn't",
+    "weren't",
+    "don't",
+    "doesn't",
+    "didn't",
+    "haven't",
+    "hasn't",
+    "hadn't",
+    "nor",
+    "hardly",
+    "barely",
+}
+
+_LEMMATIZER = WordNetLemmatizer()
+_STOPWORDS: set[str] | None = None
+
+
+def _ensure_nltk_resources() -> None:
+    """Download NLTK resources if they are missing."""
+    resources = ["punkt", "stopwords", "wordnet", "omw-1.4"]
+    for resource in resources:
+        try:
+            if resource == "punkt":
+                word_tokenize("test sentence")
+            elif resource == "stopwords":
+                stopwords.words("english")
+            elif resource == "wordnet":
+                _LEMMATIZER.lemmatize("tested", pos="v")
+            elif resource == "omw-1.4":
+                _LEMMATIZER.lemmatize("tested", pos="v")
+        except Exception:
+            try:
+                nltk_download(resource, quiet=True)
+            except Exception:
+                pass
+
+
+_ensure_nltk_resources()
+
+
+def _get_stopwords() -> set[str]:
+    global _STOPWORDS
+    if _STOPWORDS is None:
+        try:
+            _STOPWORDS = set(stopwords.words("english"))
+        except Exception:
+            _STOPWORDS = set()
+        _STOPWORDS = {word for word in _STOPWORDS if word not in NEGATION_WORDS}
+    return _STOPWORDS
+
+
+def normalize_text(text: str | None) -> str:
+    """Normalize text by stripping HTML, URLs, punctuation, and repeated whitespace."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = html.unescape(text)
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = text.replace("&nbsp;", " ")
+    text = text.replace("\u2019", "'").replace("\u2018", "'")
+    text = re.sub(r"[^\w\s']+", " ", text, flags=re.UNICODE)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    if not text:
+        return ""
+
+    try:
+        tokens = word_tokenize(text)
+    except Exception:
+        tokens = text.split()
+
+    cleaned_tokens: List[str] = []
+    for token in tokens:
+        token = token.strip("'")
+        if not token:
+            continue
+        if token in NEGATION_WORDS:
+            cleaned_tokens.append(token)
+            continue
+        if token in _get_stopwords():
+            continue
+        cleaned_tokens.append(_LEMMATIZER.lemmatize(token, pos="v"))
+
+    return " ".join(cleaned_tokens).strip()
+
+
+def preprocess_text(text: str | None) -> str:
+    """Safely preprocess a single text value for both training and inference."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = text.strip()
+    if not text:
+        return ""
+
+    cleaned = normalize_text(text)
+    if not cleaned:
+        return ""
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def preprocess_batch(texts: Iterable[str]) -> List[str]:
+    """Preprocess a sequence of text values consistently."""
+    return [preprocess_text(text) for text in texts]

@@ -1,14 +1,10 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-.pytest_cache/
-.mypy_cache/
-.ipynb_checkpoints/
-.env
-.env.*
-.DS_Store
-*.log
-models/*.joblib
-models/*.json
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[theme]
+primaryColor = "#2563eb"
+backgroundColor = "#f8fafc"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0f172a"
