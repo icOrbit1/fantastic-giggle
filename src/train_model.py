@@ -1,76 +1,131 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+import html
+import re
+from typing import Iterable, List
 
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
+from nltk import download as nltk_download
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
-matplotlib.use("Agg")
+NEGATION_WORDS = {
+    "not",
+    "no",
+    "never",
+    "none",
+    "cannot",
+    "can't",
+    "won't",
+    "isn't",
+    "aren't",
+    "wasn't",
+    "weren't",
+    "don't",
+    "doesn't",
+    "didn't",
+    "haven't",
+    "hasn't",
+    "hadn't",
+    "nor",
+    "hardly",
+    "barely",
+}
 
-
-def compute_metrics(y_true: Iterable[Any], y_pred: Iterable[Any], labels: List[Any] | None = None) -> Dict[str, Any]:
-    """Compute multiclass evaluation metrics with macro averaging and safe handling for edge cases."""
-    y_true = list(y_true)
-    y_pred = list(y_pred)
-    if labels is None:
-        labels = sorted(set(y_true) | set(y_pred))
-    accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, average="macro", labels=labels, zero_division=0)
-    recall = recall_score(y_true, y_pred, average="macro", labels=labels, zero_division=0)
-    f1 = f1_score(y_true, y_pred, average="macro", labels=labels, zero_division=0)
-    cm = confusion_matrix(y_true, y_pred, labels=labels)
-    report = classification_report(y_true, y_pred, labels=labels, output_dict=True, zero_division=0)
-    return {
-        "accuracy": float(accuracy),
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "confusion_matrix": cm,
-        "classification_report": report,
-        "labels": labels,
-    }
-
-
-def confusion_matrix_figure(y_true: Iterable[Any], y_pred: Iterable[Any], labels: List[Any] | None = None) -> plt.Figure:
-    """Build a confusion matrix figure for the held-out test set."""
-    metrics = compute_metrics(y_true, y_pred, labels=labels)
-    labels_display = metrics["labels"]
-    cm = metrics["confusion_matrix"]
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels_display, yticklabels=labels_display, ax=ax)
-    ax.set_xlabel("Predicted label")
-    ax.set_ylabel("True label")
-    ax.set_title("Confusion Matrix")
-    fig.tight_layout()
-    return fig
+_LEMMATIZER = WordNetLemmatizer()
+_STOPWORDS: set[str] | None = None
 
 
-def classification_report_dataframe(y_true: Iterable[Any], y_pred: Iterable[Any], labels: List[Any] | None = None) -> pd.DataFrame:
-    metrics = compute_metrics(y_true, y_pred, labels=labels)
-    report = metrics["classification_report"]
-    rows = []
-    for label in metrics["labels"]:
-        label_data = report.get(str(label), report.get(label, {}))
-        rows.append(
-            {
-                "label": label,
-                "precision": label_data.get("precision", 0.0),
-                "recall": label_data.get("recall", 0.0),
-                "f1-score": label_data.get("f1-score", 0.0),
-                "support": label_data.get("support", 0),
-            }
-        )
-    rows.append(
-        {
-            "label": "macro avg",
-            "precision": report.get("macro avg", {}).get("precision", 0.0),
-            "recall": report.get("macro avg", {}).get("recall", 0.0),
-            "f1-score": report.get("macro avg", {}).get("f1-score", 0.0),
-            "support": report.get("macro avg", {}).get("support", 0),
-        }
-    )
-    return pd.DataFrame(rows)
+def _ensure_nltk_resources() -> None:
+    """Download NLTK resources if they are missing."""
+    resources = ["punkt", "stopwords", "wordnet", "omw-1.4"]
+    for resource in resources:
+        try:
+            if resource == "punkt":
+                word_tokenize("test sentence")
+            elif resource == "stopwords":
+                stopwords.words("english")
+            elif resource == "wordnet":
+                _LEMMATIZER.lemmatize("tested", pos="v")
+            elif resource == "omw-1.4":
+                _LEMMATIZER.lemmatize("tested", pos="v")
+        except Exception:
+            try:
+                nltk_download(resource, quiet=True)
+            except Exception:
+                pass
+
+
+_ensure_nltk_resources()
+
+
+def _get_stopwords() -> set[str]:
+    global _STOPWORDS
+    if _STOPWORDS is None:
+        try:
+            _STOPWORDS = set(stopwords.words("english"))
+        except Exception:
+            _STOPWORDS = set()
+        _STOPWORDS = {word for word in _STOPWORDS if word not in NEGATION_WORDS}
+    return _STOPWORDS
+
+
+def normalize_text(text: str | None) -> str:
+    """Normalize text by stripping HTML, URLs, punctuation, repeated whitespace, and stopwords."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = html.unescape(text)
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = text.replace("&nbsp;", " ")
+    text = text.replace("\u2019", "'").replace("\u2018", "'")
+    text = re.sub(r"[^\w\s']+", " ", text, flags=re.UNICODE)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    if not text:
+        return ""
+
+    try:
+        tokens = word_tokenize(text)
+    except Exception:
+        tokens = text.split()
+
+    cleaned_tokens: List[str] = []
+    for token in tokens:
+        token = token.strip("'")
+        if not token:
+            continue
+        if token in NEGATION_WORDS:
+            cleaned_tokens.append(token)
+            continue
+        if token in _get_stopwords():
+            continue
+        cleaned_tokens.append(_LEMMATIZER.lemmatize(token, pos="v"))
+
+    return " ".join(cleaned_tokens).strip()
+
+
+def preprocess_text(text: str | None) -> str:
+    """Safely preprocess a single text value for both training and inference."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = text.strip()
+    if not text:
+        return ""
+
+    normalized = normalize_text(text)
+    if not normalized:
+        return ""
+
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def preprocess_batch(texts: Iterable[str]) -> List[str]:
+    """Apply the preprocessing pipeline to a sequence of text entries."""
+    return [preprocess_text(text) for text in texts]
